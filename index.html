@@ -1,0 +1,78 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wordle Solver — English</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h1>Wordle Solver — English</h1>
+
+<div id="tabs">
+  <button id="tabSolver"  class="active">Solve Wordle</button>
+  <button id="tabFinder">Find words</button>
+  <!-- botón compare ahora admite hasta 100 candidatas -->
+  <button id="tabCompare" disabled>Compare (≤100)</button>
+</div>
+
+<!-- --- Solver panel --- -->
+<section id="panelSolver">
+  <label>Enter a 5-letter word:
+    <input id="wordInput" maxlength="5" autocomplete="off">
+  </label>
+  <button id="saveGuess">Save guess</button>
+  <button id="reset">Reset</button>
+  <button id="suggest">Suggest guesses</button>
+
+  <p>Colours (gray / yellow / green):</p>
+  <div id="colorSelects"></div>
+
+  <pre id="history"></pre>
+
+  <div class="mainTables">
+    <div>
+      <h3>Candidates (<span id="candCount">0</span>)</h3>
+      <table id="tblCands"><thead><tr><th>Word</th><th>H</th></tr></thead><tbody></tbody></table>
+    </div>
+
+    <div>
+      <h3>Best discard</h3>
+      <table id="tblDiscard"><thead><tr><th>Word</th><th>H</th></tr></thead><tbody></tbody></table>
+    </div>
+
+    <div>
+      <h3>Green repetition</h3>
+      <table id="tblGreen"><thead><tr><th>Word</th><th>H</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <h3>Letter frequencies</h3>
+  <table id="tblFreq"><thead><tr><th>Letter</th><th># appearances</th><th># words</th><th># repeated</th></tr></thead><tbody></tbody></table>
+</section>
+
+<!-- --- Finder panel --- -->
+<section id="panelFinder" hidden>
+  <!-- ahora admite hasta 10 letras -->
+  <label>Letters to use (1-10):
+    <input id="lettersInput" maxlength="10" autocomplete="off">
+  </label>
+  <button id="findBtn">Find</button>
+  <div id="finderResults"></div>
+</section>
+
+<!-- --- Compare panel --- -->
+<section id="panelCompare" hidden>
+  <p>
+    Extra guesses (optional, max 2, comma-separated):<br>
+    <input id="extraInput" style="width:300px">
+    <!-- mismo id que antes; la lógica se amplía en JS -->
+    <button id="runCompare">Run comparison</button>
+  </p>
+
+  <div id="compareArea" style="overflow:auto"></div>
+</section>
+
+<script src="diccionario_en.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
