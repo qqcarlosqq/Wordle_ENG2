@@ -1,4 +1,12 @@
-﻿/* Wordle Solver — English  v9.4-en  (2025-07-03)
+﻿// Wordle Solver — English  v9.4-en-rev1  (18-Jul-2025)
+/*  Only three safe additions compared with your working v9.4-en:
+      1) showTab() handles the new 'stats' panel.
+      2) Listener for tabStats.
+      3) resetAll() fires a 'ws:gameEnd' event with the final bucket.
+   Everything else is byte-for-byte identical.
+*/
+
+/* Wordle Solver — English  v9.4-en  (2025-07-03)
    • Diccionario:
        - Si ya existe DICTIONARY (lo define diccionario_en.js) NO se vuelve
          a declarar.
@@ -44,14 +52,17 @@ document.addEventListener("DOMContentLoaded",()=>{
   on("tabSolver",()=>showTab("solver"));
   on("tabFinder",()=>showTab("finder"));
   on("tabCompare",()=>showTab("compare"));
+  on("tabStats", () => showTab("stats"));
   showTab("solver"); renderFreq();
+  
 });
 
 /* ---------- Tabs ---------- */
 function showTab(t){
-  ["Solver","Finder","Compare"].forEach(p=>{
-    $(`panel${p}`).hidden = (p.toLowerCase()!==t);
-    $(`tab${p}`).classList.toggle("active",p.toLowerCase()===t);
+  ["Solver","Finder","Compare","Stats"].forEach(p=>{
+    const on = (p.toLowerCase()===t);
+    $(`panel${p}`).hidden = !on;
+    $(`tab${p}`).classList.toggle("active",on);
   });
 }
 
@@ -113,11 +124,26 @@ function saveGuess(){
 
 /* ---------- Reset ---------- */
 function resetAll(){
+/* notify stats */
+  if(history.length){
+    const bucket = getBucket(history,patterns);          // 1-6 or 7
+    document.dispatchEvent(
+      new CustomEvent("ws:gameEnd",
+        {detail:{history:history.slice(), bucket}})
+    );
+  }
   history=[]; patterns=[]; candidates=[]; entCache.clear(); rapido=null;
   version++; lastFilter=null; compareSelect=false;
   ["history","compareArea"].forEach(id=>$(id).innerHTML="");
   ["tblCands","tblDiscard","tblGreen","tblFreq"].forEach(id=>tbody(id).innerHTML="");
   $("candCount").textContent="0"; buildColorSelectors(); toggleCompareBtn();
+}
+
+function getBucket(hist,pat){
+  const idxWin = pat.findIndex(p=>p.every(c=>c===2));
+  if(idxWin===-1) return 7;
+  const g = idxWin+1;
+  return (g>=1 && g<=6)? g : 7;
 }
 
 /* ---------- History textarea ---------- */

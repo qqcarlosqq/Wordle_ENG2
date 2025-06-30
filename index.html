@@ -8,14 +8,35 @@
 <body>
 <h1>Wordle Solver — English</h1>
 
+<style>
+/* — reglas base que ya tenías — */
+body{font-family:Arial,Helvetica,sans-serif;margin:0 12px;}
+h1{margin:10px 0;}
+table{border-collapse:collapse;font-size:12px;margin-bottom:12px;}
+th,td{padding:2px 4px;border:1px solid #e0e0e0;text-align:left;}
+th{background:#f0f0f0;white-space:nowrap;}
+td{white-space:nowrap;}
+.row{display:flex;gap:8px;flex-wrap:wrap;}
+.column{flex:1 1 140px;}
+.btnTab{margin-right:6px;margin-bottom:8px;cursor:pointer;}
+
+/* — ajustes específicos para Estadísticas — */
+#panelStats{padding-top:4px;}
+#panelStats .statsBox{display:inline-block;vertical-align:top;margin-right:18px;}
+#panelStats table{width:auto;min-width:140px;}
+#panelStats h3{margin:6px 0 2px;}
+#panelStats button{margin-bottom:6px;}
+</style>
+
 <div id="tabs">
   <button id="tabSolver"  class="active">Solve Wordle</button>
   <button id="tabFinder">Find words</button>
-  <!-- botón compare ahora admite hasta 100 candidatas -->
   <button id="tabCompare" disabled>Compare (≤100)</button>
+  <!-- NEW -->
+  <button id="tabStats">Statistics</button>
 </div>
 
-<!-- --- Solver panel --- -->
+<!-- ========= Solver panel ========= -->
 <section id="panelSolver">
   <label>Enter a 5-letter word:
     <input id="wordInput" maxlength="5" autocomplete="off">
@@ -34,12 +55,10 @@
       <h3>Candidates (<span id="candCount">0</span>)</h3>
       <table id="tblCands"><thead><tr><th>Word</th><th>H</th></tr></thead><tbody></tbody></table>
     </div>
-
     <div>
       <h3>Best discard</h3>
       <table id="tblDiscard"><thead><tr><th>Word</th><th>H</th></tr></thead><tbody></tbody></table>
     </div>
-
     <div>
       <h3>Green repetition</h3>
       <table id="tblGreen"><thead><tr><th>Word</th><th>H</th></tr></thead><tbody></tbody></table>
@@ -50,9 +69,8 @@
   <table id="tblFreq"><thead><tr><th>Letter</th><th># appearances</th><th># words</th><th># repeated</th></tr></thead><tbody></tbody></table>
 </section>
 
-<!-- --- Finder panel --- -->
+<!-- ========= Finder panel ========= -->
 <section id="panelFinder" hidden>
-  <!-- ahora admite hasta 10 letras -->
   <label>Letters to use (1-10):
     <input id="lettersInput" maxlength="10" autocomplete="off">
   </label>
@@ -60,19 +78,53 @@
   <div id="finderResults"></div>
 </section>
 
-<!-- --- Compare panel --- -->
+<!-- ========= Compare panel ========= -->
 <section id="panelCompare" hidden>
   <p>
     Extra guesses (optional, max 2, comma-separated):<br>
     <input id="extraInput" style="width:300px">
-    <!-- mismo id que antes; la lógica se amplía en JS -->
     <button id="runCompare">Run comparison</button>
   </p>
-
   <div id="compareArea" style="overflow:auto"></div>
 </section>
 
+<!-- ========= Statistics panel (NEW) ========= -->
+<section id="panelStats" hidden>
+  <h2>Statistics</h2>
+
+  <div class="statsBox">
+    <h3>NYT</h3>
+    <button id="btnResetActual">Reset / Edit</button>
+    <table>
+      <thead><tr><th>Guesses</th><th>Count</th><th>%</th></tr></thead>
+      <tbody id="statsActualBody"></tbody>
+    </table>
+  </div>
+
+  <div class="statsBox">
+    <h3>After Initial Tool</h3>
+    <button id="btnResetHist">Reset / Edit</button>
+    <table>
+      <thead><tr><th>Guesses</th><th>Count</th><th>%</th></tr></thead>
+      <tbody id="statsHistBody"></tbody>
+    </table>
+  </div>
+
+  <div class="statsBox">
+    <h3>After using this tool</h3>
+    <button id="btnResetTool">Reset / Edit</button>
+    <table>
+      <thead><tr><th>Guesses</th><th>Count</th><th>%</th></tr></thead>
+      <tbody id="statsToolBody"></tbody>
+    </table>
+  </div>
+
+  <p style="clear:both"><button id="btnSendStats">Send by e-mail</button></p>
+</section>
+
+<!-- ========= Scripts (order matters!) ========= -->
 <script src="diccionario_en.js"></script>
+<script src="stats_en.js"></script>   <!-- NEW -->
 <script src="script.js"></script>
 </body>
 </html>
