@@ -1,9 +1,30 @@
-﻿// Wordle Solver — English  v9.4-en-rev1  (18-Jul-2025)
+﻿/* Wordle Solver — English 10.2-en (2025-07-01)
+   – Stats export restored & localStorage persist
+   – Compare tab enables when FULL or SHORT ≤ 100
+   – “max” header shows the best (minimum) value
+   – 6 suggestion tables aligned (CSS)
+*/
+
+/* Wordle Solver — English 10.1-en  (2025-07-01)
+   – two candidate pools (FULL / SHORT) with 6 suggestion tables
+   – colour-coded Compare (≤100) with wildcard rows/cols in red
+   – Statistics panel wired via ws:gameEnd
+   – CSS tweak → 6 tables on one row
+*/
+
+// Wordle Solver — English  v10.0-en  (2025-07-01)
+// Cambios principales:
+//   • 2 pools de candidatos (FULL / SHORT) y 6 tablas.
+//   • 2 tablas de frecuencias.
+//   • Selector de pool en “Compare (≤100)”.
+//   • Solo se valida contra DICT_FULL al guardar intentos.
+
+// Wordle Solver — English  v9.4-en-rev1  (18-Jul-2025)
 /*  Only three safe additions compared with your working v9.4-en:
       1) showTab() handles the new 'stats' panel.
       2) Listener for tabStats.
       3) resetAll() fires a 'ws:gameEnd' event with the final bucket.
-   Everything else is byte-for-byte identical.
+   Everything else is byte-for-byte identicl.
 */
 
 /* Wordle Solver — English  v9.4-en  (2025-07-03)
@@ -15,144 +36,145 @@
      (solo verde contradictorio y gris→no-gris).
 */
 
-/* ---------- Diccionario ---------- */
-if (typeof DICTIONARY === "undefined") {
-  const raw = (typeof diccionario_en !== "undefined") ? diccionario_en : [];
-  window.DICTIONARY = raw.map(w => w.toUpperCase());
-}
 
-/* ---------- Constantes ---------- */
-const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-const COLORS   = ["gray","Yellow","GREEN"];
-const FAST_LIMIT = 2000;
 
-const palette = [
-  "#ffcc00","#4da6ff","#66cc66","#ff6666","#c58aff","#ffa64d",
-  "#4dd2ff","#99ff99","#ff80b3","#b3b3ff","#ffd24d","#3399ff",
-  "#77dd77","#ff4d4d","#c299ff","#ffb84d","#00bfff","#99e699",
-  "#ff99c2","#9999ff","#ffe066","#0080ff","#66ffb3","#ff4da6","#8080ff"
+/* ---------- DICTIONARIES ---------- */
+const DICT_FULL  =(typeof DICTIONARY_FULL  !=="undefined"?DICTIONARY_FULL :[]).map(w=>w.toUpperCase());
+const DICT_SHORT =(typeof DICTIONARY_SHORT !=="undefined"?DICTIONARY_SHORT:[]).map(w=>w.toUpperCase());
+
+/* ---------- CONSTANTS ---------- */
+const ALPHABET="ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const COLORS   =["gray","Yellow","GREEN"];
+const FAST_LIMIT=2000;
+const palette=[
+  "#ffcc00","#4da6ff","#66cc66","#ff6666","#c58aff","#ffa64d","#4dd2ff",
+  "#99ff99","#ff80b3","#b3b3ff","#ffd24d","#3399ff","#77dd77","#ff4d4d",
+  "#c299ff","#ffb84d","#00bfff","#99e699","#ff99c2","#9999ff","#ffe066",
+  "#0080ff","#66ffb3","#ff4da6","#8080ff"
 ];
 
-/* ---------- Estado ---------- */
-let history=[], patterns=[], version=0;
-let candidates=[], entCache=new Map(), rapido=null;
-let compareSelect=false, lastFilter=null;
+/* ---------- STATE ---------- */
+let history=[], patterns=[];
+let candFull=[], candShort=[];
+let entFull=new Map(), entShort=new Map();
+let verFull=0, verShort=0;
+let rapFull=null, rapShort=null;
+let filterCache=null;
+let compareSelect=false;
 
-/* ---------- Helper DOM ---------- */
+/* ---------- DOM helpers ---------- */
 const $=id=>document.getElementById(id);
 const on=(id,fn)=>$(id).addEventListener("click",fn);
 const tbody=id=>$(id).tBodies[0]||$(id).appendChild(document.createElement("tbody"));
+const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
 
-/* ================= INIT ================= */
+/* ==================================================== */
+/* =====================  INIT  ======================= */
 document.addEventListener("DOMContentLoaded",()=>{
   buildColorSelectors();
   on("saveGuess",saveGuess); on("reset",resetAll);
   on("suggest",generateLists); on("findBtn",runFinder);
-  on("runCompare",runCompare);
-  on("tabSolver",()=>showTab("solver"));
-  on("tabFinder",()=>showTab("finder"));
+  on("runCompare",runCompare); $("comparePool").addEventListener("change",toggleCompareBtn);
+
+  on("tabSolver", ()=>showTab("solver"));
+  on("tabFinder", ()=>showTab("finder"));
   on("tabCompare",()=>showTab("compare"));
-  on("tabStats", () => showTab("stats"));
-  showTab("solver"); renderFreq();
-  
+  on("tabStats",  ()=>showTab("stats"));
+
+  showTab("solver");               /* default */
+  toggleCompareBtn();              /* initial state */
 });
 
 /* ---------- Tabs ---------- */
 function showTab(t){
   ["Solver","Finder","Compare","Stats"].forEach(p=>{
     const on = (p.toLowerCase()===t);
-    $(`panel${p}`).hidden = !on;
+    $(`panel${p}`).hidden=!on;
     $(`tab${p}`).classList.toggle("active",on);
   });
 }
 
-/* ---------- Colour selectors ---------- */
+/* ==================================================== */
+/* ==============  GUESS  &  HISTORY  ================= */
 function buildColorSelectors(){
   const box=$("colorSelects"); box.innerHTML="";
   for(let i=0;i<5;i++){
     const s=document.createElement("select");
     ["Gray","Yellow","Green"].forEach((txt,val)=>{
-      const o=document.createElement("option");
-      o.value=val; o.textContent=txt; s.appendChild(o);
+      const o=document.createElement("option"); o.value=val;o.textContent=txt;s.appendChild(o);
     });
     box.appendChild(s);
   }
 }
-const readColors=()=>[...$("colorSelects").children].map(sel=>+sel.value);
+const readColors=()=>[...$("colorSelects").children].map(s=>+s.value);
 
-/* ================= SAVE GUESS ================= */
 function saveGuess(){
   const word=$("wordInput").value.toUpperCase().trim();
-  if(!/^[A-Z]{5}$/.test(word)){ alert("Enter a 5-letter word"); return; }
+  if(!/^[A-Z]{5}$/.test(word)){alert("Enter a 5-letter word");return;}
 
-  if(!DICTIONARY.includes(word) &&
+  if(!DICT_FULL.includes(word) &&
      !confirm(`"${word}" is not in the dictionary.\nContinue anyway?`)) return;
 
   const pat=readColors();
 
-  /* ---------- coherencia estilo ES ---------- */
-  const greenPos=Array(5).fill(null); const absent=new Set();
-
-  history.forEach((w,i)=>{
-    patterns[i].forEach((c,pos)=>{ if(c===2) greenPos[pos]=w[pos]; });
-  });
-  history.forEach((w,i)=>{
-    w.split("").forEach((ch,idx)=>{
-      const col=patterns[i][idx];
-      if(col!==0) absent.delete(ch);
-      else if(!absent.has(ch) && !greenPos.includes(ch)
-              && !patterns[i].includes(1)) absent.add(ch);
-    });
-  });
+  /* --- consistency check (green / yellow / gray) --- */
+  const greenPos=Array(5).fill(null), absent=new Set();
+  history.forEach((w,i)=>patterns[i].forEach((c,pos)=>{if(c===2)greenPos[pos]=w[pos];}));
+  history.forEach((w,i)=>w.split("").forEach((ch,idx)=>{
+    const col=patterns[i][idx];
+    if(col!==0) absent.delete(ch);
+    else if(!absent.has(ch)&&!greenPos.includes(ch)&&!patterns[i].includes(1)) absent.add(ch);
+  }));
+  for(let i=0;i<5;i++)
+    if(pat[i]===2&&greenPos[i]&&greenPos[i]!==word[i]){
+      alert(`Conflict: position ${i+1} already green '${greenPos[i]}'.`);return;}
   for(let i=0;i<5;i++){
-    if(pat[i]===2 && greenPos[i] && greenPos[i]!==word[i]){
-      alert(`Conflict: position ${i+1} already green '${greenPos[i]}'.`); return;
-    }
+    const ch=word[i]; if(absent.has(ch)&&pat[i]!==0){
+      alert(`Conflict: letter '${ch}' was gray, now ${COLORS[pat[i]]}.`);return;}
   }
-  for(let i=0;i<5;i++){
-    const ch=word[i]; if(absent.has(ch) && pat[i]!==0){
-      alert(`Conflict: letter '${ch}' was gray before and now is ${COLORS[pat[i]]}.`); return;
-    }
-  }
-  /* ---------- fin coherencia ---------- */
 
+  /* --- store --- */
   history.push(word); patterns.push(pat);
   $("wordInput").value=""; buildColorSelectors(); updateHistory();
-  candidates=[]; entCache.clear(); rapido=null; version++; lastFilter=null;
-  $("compareArea").innerHTML=""; compareSelect=false; toggleCompareBtn();
+
+  candFull=candShort=[];
+  entFull.clear(); entShort.clear();
+  rapFull=rapShort=null;
+  filterCache=null; verFull++; verShort++;
+  compareSelect=false; $("compareArea").innerHTML="";
+  toggleCompareBtn();
+}
+
+function updateHistory(){
+  $("history").textContent=history.map((w,i)=>`${w} → ${patterns[i].map(c=>COLORS[c]).join(", ")}`).join("\n");
 }
 
 /* ---------- Reset ---------- */
-function resetAll(){
-/* notify stats */
-  if(history.length){
-    const bucket = getBucket(history,patterns);          // 1-6 or 7
-    document.dispatchEvent(
-      new CustomEvent("ws:gameEnd",
-        {detail:{history:history.slice(), bucket}})
-    );
-  }
-  history=[]; patterns=[]; candidates=[]; entCache.clear(); rapido=null;
-  version++; lastFilter=null; compareSelect=false;
-  ["history","compareArea"].forEach(id=>$(id).innerHTML="");
-  ["tblCands","tblDiscard","tblGreen","tblFreq"].forEach(id=>tbody(id).innerHTML="");
-  $("candCount").textContent="0"; buildColorSelectors(); toggleCompareBtn();
-}
-
-function getBucket(hist,pat){
-  const idxWin = pat.findIndex(p=>p.every(c=>c===2));
+function getBucket(hist,patArr){
+  const idxWin=patArr.findIndex(p=>p.every(c=>c===2));
   if(idxWin===-1) return 7;
-  const g = idxWin+1;
-  return (g>=1 && g<=6)? g : 7;
+  const g=idxWin+1; return (g>=1&&g<=6)?g:7;
+}
+function resetAll(){
+  if(history.length){
+    const bucket=getBucket(history,patterns);
+    document.dispatchEvent(new CustomEvent("ws:gameEnd",{detail:{history:history.slice(),bucket}}));
+  }
+  history=[]; patterns=[];
+  candFull=candShort=[];
+  entFull.clear(); entShort.clear();
+  rapFull=rapShort=null;
+  filterCache=null; verFull++; verShort++;
+  ["history","compareArea"].forEach(id=>$(id).innerHTML="");
+  ["tblCandFull","tblDiscFull","tblGreenFull",
+   "tblCandShort","tblDiscShort","tblGreenShort",
+   "tblFreqFull","tblFreqShort"].forEach(id=>tbody(id).innerHTML="");
+  $("cntFull").textContent="0"; $("cntShort").textContent="0";
+  buildColorSelectors(); compareSelect=false; toggleCompareBtn();
 }
 
-/* ---------- History textarea ---------- */
-function updateHistory(){
-  $("history").textContent = history.map((w,i)=>
-    `${w} → ${patterns[i].map(c=>COLORS[c]).join(", ")}`).join("\n");
-}
-
-/* ================= FILTER (min/max) ================= */
+/* ==================================================== */
+/* ==============  FILTER & CANDIDATES  =============== */
 function buildFilter(hist,patArr){
   const pPos=Array(5).fill("."), G=new Set(),Y=new Set(),X=new Set(),posNo=[];
   const min={},max={}; ALPHABET.forEach(ch=>{min[ch]=0;max[ch]=5;});
@@ -161,8 +183,8 @@ function buildFilter(hist,patArr){
     const w=hist[i], gC={},yC={},xC={}; ALPHABET.forEach(ch=>gC[ch]=yC[ch]=xC[ch]=0);
     p.forEach((c,pos)=>{
       const ch=w[pos];
-      if(c===2){ pPos[pos]=ch; G.add(ch); gC[ch]++; }
-      else if(c===1){ Y.add(ch); posNo.push({ch,pos}); yC[ch]++; }
+      if(c===2){pPos[pos]=ch; G.add(ch); gC[ch]++;}
+      else if(c===1){Y.add(ch);posNo.push({ch,pos});yC[ch]++;}
       else xC[ch]++;
     });
     ALPHABET.forEach(ch=>{
@@ -172,12 +194,11 @@ function buildFilter(hist,patArr){
     });
   });
   ALPHABET.forEach(ch=>{
-    if(min[ch]===0 && max[ch]===5 && hist.some(w=>w.includes(ch))) max[ch]=0;
+    if(min[ch]===0&&max[ch]===5&&hist.some(w=>w.includes(ch))) max[ch]=0;
     if(max[ch]===0) X.add(ch);
   });
-  return {regexp:new RegExp("^"+pPos.join("")+"$"),G,Y,X,posNo,min,max};
+  return{regexp:new RegExp("^"+pPos.join("")+"$"),G,Y,X,posNo,min,max};
 }
-
 function filterList(list,f){
   return list.filter(w=>{
     if(!f.regexp.test(w)) return false;
@@ -189,153 +210,161 @@ function filterList(list,f){
   });
 }
 
-/* ================= LISTAS PRINCIPALES ================= */
-function generateLists(){
-  if(!candidates.length) updateCandidates();
-  renderAll();
-  toggleCompareBtn();
-}
+/* ---------- update & render ---------- */
 function updateCandidates(){
-  lastFilter = buildFilter(history,patterns);
-  candidates = filterList(DICTIONARY,lastFilter);
-  entCache.clear(); rapido=null; version++;
+  filterCache=buildFilter(history,patterns);
+  candFull =filterList(DICT_FULL ,filterCache);
+  candShort=filterList(DICT_SHORT,filterCache);
+
+  entFull.clear(); entShort.clear(); rapFull=rapShort=null;
+  verFull++; verShort++;
+}
+function generateLists(){
+  if(!candFull.length && !candShort.length) updateCandidates();
+  renderAll(); toggleCompareBtn();
 }
 function renderAll(){
-  $("candCount").textContent=candidates.length;
-  renderCandidates(); renderDiscard(); renderGreen(); renderFreq();
+  $("cntFull").textContent =candFull.length;
+  $("cntShort").textContent=candShort.length;
+
+  ["full","short"].forEach(renderCandidates);
+  ["full","short"].forEach(renderDiscard);
+  ["full","short"].forEach(renderGreen);
+  ["full","short"].forEach(renderFreq);
 }
 
-/* ---------- heurística rápida ---------- */
-function buildRapido(list){
-  const f=new Map(), pos=Array.from({length:5},()=>new Map());
-  list.forEach(w=>w.split("").forEach((ch,i)=>{
-    f.set(ch,(f.get(ch)||0)+1);
-    pos[i].set(ch,(pos[i].get(ch)||0)+1);
-  }));
-  const raw=w=>{
-    let a=0; new Set(w).forEach(ch=>a+=(f.get(ch)||0));
-    let b=0; w.split("").forEach((ch,i)=>b+=(pos[i].get(ch)||0));
-    return .3*a+.7*b;
-  };
-  let mx=0; list.forEach(w=>mx=Math.max(mx,raw(w)));
-  const k=(list.length-1)/mx, map=new Map();
-  list.forEach(w=>map.set(w, +(raw(w)*k).toFixed(2)));
-  return {map,calc:w=>+(raw(w)*k).toFixed(2)};
-}
-function H(word){
-  if(candidates.length>FAST_LIMIT){
-    if(!rapido) rapido=buildRapido(candidates);
+/* ==================================================== */
+/* ==============  ENTROPY (exact / fast) ============= */
+function H(word,pool){
+  const C = pool==="full"?candFull:candShort;
+  const cache=pool==="full"?entFull:entShort;
+  let rapido =pool==="full"?rapFull:rapShort;
+  const ver   =pool==="full"?verFull:verShort;
+
+  if(!C.length) return 0;
+  if(C.length>FAST_LIMIT){
+    if(!rapido){
+      const f=new Map(), pos=Array.from({length:5},()=>new Map());
+      C.forEach(w=>w.split("").forEach((ch,i)=>{
+        f.set(ch,(f.get(ch)||0)+1);
+        pos[i].set(ch,(pos[i].get(ch)||0)+1);
+      }));
+      const raw=w=>{
+        let a=0; new Set(w).forEach(ch=>a+=(f.get(ch)||0));
+        let b=0; w.split("").forEach((ch,i)=>b+=(pos[i].get(ch)||0));
+        return .3*a+.7*b;
+      };
+      let mx=0; C.forEach(w=>mx=Math.max(mx,raw(w)));
+      const k=(C.length-1)/mx, m=new Map();
+      C.forEach(w=>m.set(w,+(raw(w)*k).toFixed(2)));
+      rapido={map:m,calc:w=>+(raw(w)*k).toFixed(2)};
+      if(pool==="full") rapFull=rapido; else rapShort=rapido;
+    }
     return rapido.map.get(word)||rapido.calc(word);
   }
-  /* entropía exacta en cache */
-  const c=entCache.get(word);
-  if(c&&c.v===version) return c.h;
-  const m=new Map();
-  candidates.forEach(sol=>{
-    const k=patternKey(sol,word);
-    m.set(k,(m.get(k)||0)+1);
+
+  const c=cache.get(word); if(c&&c.v===ver) return c.h;
+  const m=new Map(); C.forEach(sol=>{
+    const k=patternKey(sol,word); m.set(k,(m.get(k)||0)+1);
   });
-  const n=candidates.length;
-  const h=n - [...m.values()].reduce((a,x)=>a+x*x,0)/n;
-  entCache.set(word,{v:version,h});
-  return h;
+  const n=C.length, h=n - [...m.values()].reduce((a,x)=>a+x*x,0)/n;
+  cache.set(word,{v:ver,h}); return h;
 }
 
-/* ---------- patternKey (sin cambios) ---------- */
+/* ==================================================== */
+/* ==============  UTILITIES  ========================= */
 function patternFromWords(sol,gu){
   const out=Array(5).fill(0), S=sol.split(""), G=gu.split("");
-  for(let i=0;i<5;i++) if(G[i]===S[i]){ out[i]=2; S[i]=G[i]=null; }
+  for(let i=0;i<5;i++) if(G[i]===S[i]){out[i]=2;S[i]=G[i]=null;}
   for(let i=0;i<5;i++) if(G[i]){
-    const j=S.indexOf(G[i]); if(j!==-1){ out[i]=1; S[j]=null; }
+    const j=S.indexOf(G[i]); if(j!==-1){out[i]=1;S[j]=null;}
   }
   return out;
 }
 const patternKey=(s,g)=>patternFromWords(s,g).join("");
 
-/* ---------- helpers sets ---------- */
-const greens = ()=>{const s=new Set();patterns.forEach((p,i)=>p.forEach((c,idx)=>{if(c===2)s.add(history[i][idx]);}));return s;};
-const yellows= ()=>{const s=new Set();patterns.forEach((p,i)=>p.forEach((c,idx)=>{if(c===1)s.add(history[i][idx]);}));return s;};
-const knownSet= ()=>new Set([...greens(),...yellows()]);
-
-/* ---------- marca de grises ---------- */
-const markGrays = w=>{
-  if(!lastFilter) return w;
-  let out=""; for(const ch of w) out += lastFilter.X.has(ch) ? ch+"*" : ch;
+const markGrays=w=>{
+  if(!filterCache) return w;
+  let out=""; for(const ch of w) out+=filterCache.X.has(ch)?ch+"*":ch;
   return out;
 };
+const greenPos=()=>{const g=Array(5).fill(null);
+  patterns.forEach((p,i)=>p.forEach((c,idx)=>{if(c===2)g[idx]=history[i][idx];}));
+  return g;};
+const yellows=()=>{const s=new Set();
+  patterns.forEach((p,i)=>p.forEach((c,idx)=>{if(c===1)s.add(history[i][idx]);}));
+  return s;};
+const containsAny=(w,set)=>[...set].some(ch=>w.includes(ch));
+const isGreenRep=(w,g)=>g.every((ch,i)=>!ch||(w.includes(ch)&&w[i]!==ch));
 
-/* ---------- tabla Candidates ---------- */
-function renderCandidates(){
-  const list=candidates.slice().sort((a,b)=>H(b)-H(a));
-  const tb=tbody("tblCands"); tb.innerHTML="";
+/* ==================================================== */
+/* ==============  RENDER (6 × 2)  ==================== */
+function renderCandidates(pool){
+  const list=(pool==="full"?candFull:candShort)
+              .slice(0,200).sort((a,b)=>H(b,pool)-H(a,pool));
+  const tb=tbody(`tblCand${cap(pool)}`); tb.innerHTML="";
   list.forEach(w=>tb.insertAdjacentHTML("beforeend",
-    `<tr><td>${w}</td><td>${H(w).toFixed(2)}</td></tr>`));
+    `<tr><td>${w}</td><td>${H(w,pool).toFixed(2)}</td></tr>`));
 }
-
-/* ---------- tabla Best discard ---------- */
-function renderDiscard(){
-  const kSet=knownSet();
-  const base = kSet.size ? DICTIONARY.filter(w=>!containsAny(w,kSet)) : DICTIONARY;
-  const list=base.slice().sort((a,b)=>H(b)-H(a)).slice(0,20);
-  const tb=tbody("tblDiscard"); tb.innerHTML="";
+function renderDiscard(pool){
+  const kSet=new Set([...greenPos(),...yellows()]);
+  const base = kSet.size ? DICT_FULL.filter(w=>!containsAny(w,kSet)) : DICT_FULL;
+  const list = base.slice().sort((a,b)=>H(b,pool)-H(a,pool)).slice(0,20);
+  const tb=tbody(`tblDisc${cap(pool)}`); tb.innerHTML="";
   list.forEach(w=>tb.insertAdjacentHTML("beforeend",
-    `<tr><td>${markGrays(w)}</td><td>${H(w).toFixed(2)}</td></tr>`));
+    `<tr><td>${markGrays(w)}</td><td>${H(w,pool).toFixed(2)}</td></tr>`));
 }
-
-/* ---------- tabla Green repetition ---------- */
-function greenPos(){
-  const g=Array(5).fill(null);
-  patterns.forEach((p,i)=>p.forEach((c,idx)=>{if(c===2) g[idx]=history[i][idx];}));
-  return g;
-}
-function isGreenRep(w,g){ return g.every((ch,i)=>!ch||(w.includes(ch)&&w[i]!==ch)); }
-function containsAny(w,set){ for(const ch of set) if(w.includes(ch)) return true; return false; }
-
-function renderGreen(){
-  const g=greenPos(); if(g.every(x=>!x)){ tbody("tblGreen").innerHTML=""; return; }
+function renderGreen(pool){
+  const g=greenPos(); if(g.every(x=>!x)){tbody(`tblGreen${cap(pool)}`).innerHTML="";return;}
   const ySet=yellows();
-  const pool = DICTIONARY.filter(w=>isGreenRep(w,g)&&!containsAny(w,ySet));
-  const list=pool.slice().sort((a,b)=>H(b)-H(a)).slice(0,20);
-  const tb=tbody("tblGreen"); tb.innerHTML="";
+  const poolList=DICT_FULL.filter(w=>isGreenRep(w,g)&&!containsAny(w,ySet));
+  const list=poolList.slice().sort((a,b)=>H(b,pool)-H(a,pool)).slice(0,20);
+  const tb=tbody(`tblGreen${cap(pool)}`); tb.innerHTML="";
   list.forEach(w=>tb.insertAdjacentHTML("beforeend",
-    `<tr><td>${markGrays(w)}</td><td>${H(w).toFixed(2)}</td></tr>`));
+    `<tr><td>${markGrays(w)}</td><td>${H(w,pool).toFixed(2)}</td></tr>`));
 }
-
-/* ---------- frecuencias ---------- */
-function renderFreq(){
+function renderFreq(pool){
+  const C = pool==="full"?candFull:candShort;
   const rows=ALPHABET.map(l=>({l,a:0,w:0,r:0}));
-  for(const w of candidates){
+  C.forEach(w=>{
     const seen={};
-    for(const ch of w){
+    w.split("").forEach(ch=>{
       const r=rows[ALPHABET.indexOf(ch)]; r.a++;
-      if(seen[ch]) r.r++; else { r.w++; seen[ch]=1; }
-    }
-  }
+      if(seen[ch]) r.r++; else {r.w++;seen[ch]=1;}
+    });
+  });
   rows.sort((x,y)=>y.w-x.w);
-  const tb=tbody("tblFreq"); tb.innerHTML="";
+  const tb=tbody(`tblFreq${cap(pool)}`); tb.innerHTML="";
   rows.forEach(r=>tb.insertAdjacentHTML("beforeend",
     `<tr><td>${r.l}</td><td>${r.a}</td><td>${r.w}</td><td>${r.r}</td></tr>`));
 }
 
-/* ================= COMPARE ≤100 ================= */
+/* ==================================================== */
+/* =================  COMPARE ≤100  =================== */
 function toggleCompareBtn(){
-  $("tabCompare").disabled = candidates.length===0 || candidates.length>100;
+  const lenFull = candFull.length;
+  const lenShort= candShort.length;
+  $("tabCompare").disabled = !((lenFull  && lenFull <=100) ||
+                               (lenShort && lenShort<=100));
 }
-
 function runCompare(){
+  const poolSel=$("comparePool").value;
+  const base   = poolSel==="full"?candFull:candShort;
+
   if(!compareSelect){
-    if(candidates.length>100){ alert("Too many candidates (max 100)"); return; }
-    buildSelectionList(candidates,candidates.length<=25);
+//    if(base.length>100){alert("Too many candidates (max 100)");return;}
+    buildSelectionList(base,base.length<=25);
     compareSelect=true; $("runCompare").textContent="Compare selected"; return;
   }
-  const sel=[...document.querySelectorAll("#compareArea input.selWord:checked")]
-              .map(cb=>cb.value);
-  if(!sel.length){ alert("Select at least one word"); return; }
-  if(sel.length>25){ alert("Max 25 words"); return; }
+
+  const chosen=[...document.querySelectorAll("#compareArea input.selWord:checked")].map(cb=>cb.value);
+  if(!chosen.length){alert("Select at least one word");return;}
+  if(chosen.length>25){alert("Max 25 words");return;}
 
   const extra=$("extraInput").value.toUpperCase()
                .split(/[^A-Z]/).filter(x=>x.length===5).slice(0,2);
-  drawCompareTable([...sel,...extra]);
+  drawCompareTable([...chosen,...extra],base);
+
   compareSelect=false; $("runCompare").textContent="Run comparison";
 }
 
@@ -347,36 +376,38 @@ function buildSelectionList(list,all){
   $("compareArea").innerHTML=h+"</div>";
 }
 
-function drawCompareTable(words){
-  const n=words.length; if(!n){ $("compareArea").textContent="No words"; return; }
-  /* patrones entre cada par ---------------------------------------- */
+function drawCompareTable(words,poolCands){
+  const n=words.length; if(!n){$("compareArea").textContent="No words";return;}
+  const isExtra=w=>!poolCands.includes(w);
+
+  /* patterns + stats */
   const pat=words.map(g=>words.map(s=>patternKey(s,g)));
-  /* estadística por fila */
   const stats=pat.map(row=>{
     const grp={}; row.forEach((p,i)=>(grp[p]=grp[p]||[]).push(i));
     const sizes=Object.values(grp).map(a=>a.length);
-    return {opt:sizes.length, max:Math.max(...sizes)};
+    return{opt:sizes.length,max:Math.max(...sizes)};
   });
-  /* orden filas / columnas */
-  const ord=words.map((w,i)=>({w,idx:i,opt:stats[i].opt,max:stats[i].max}))
-                 .sort((a,b)=>b.opt-a.opt || a.max-b.max || a.w.localeCompare(b.w));
-  const orderIdx=ord.map(o=>o.idx);
-  const maxOpt=ord[0].opt, maxMax=Math.min(...ord.map(o=>o.max));
 
-  /* construir tabla ------------------------------------------------ */
+  /* order rows/cols */
+  const ord=words.map((w,i)=>({w,idx:i,opt:stats[i].opt,max:stats[i].max}))
+                 .sort((a,b)=>b.opt-a.opt||a.max-b.max||a.w.localeCompare(b.w));
+  const orderIdx=ord.map(o=>o.idx);
+  const maxOpt=ord[0].opt;
+  const bestMax=Math.min(...ord.map(o=>o.max));  /* ← mínimo de la columna */
+
+  /* build HTML */
   let html='<table style="border-collapse:collapse;font-size:12px"><thead><tr><th></th>';
   ord.forEach(o=>{
-    const red = candidates.includes(o.w) ? "" : "color:red;";
+    const red=isExtra(o.w)?'color:red;':'';
     html+=`<th style="${red}">${o.w}</th>`;
   });
-  html+=`<th>opt (${maxOpt})</th><th>max (${maxMax})</th></tr></thead><tbody>`;
+  html+=`<th>opt (${maxOpt})</th><th>max (${bestMax})</th></tr></thead><tbody>`;
 
   ord.forEach(oRow=>{
-    const extra = !candidates.includes(oRow.w);
-    const rowStyle = extra ? "color:red;" : "";
+    const rowStyle=isExtra(oRow.w)?'color:red;':'';
     html+=`<tr><th style="${rowStyle}">${oRow.w}</th>`;
 
-    /* agrupar celdas iguales (para colorear) */
+    /* colour groups */
     const groups={};
     orderIdx.forEach((origIdx,visCol)=>{
       const p=pat[oRow.idx][origIdx];
@@ -389,39 +420,40 @@ function drawCompareTable(words){
       const next=g.find(x=>x>visCol); const jump=next?next-visCol:0;
       html+=`<td style="text-align:center;background:${bg};${rowStyle}">${p}-${jump}</td>`;
     });
+
     html+=`<td style="text-align:center;font-weight:bold;${rowStyle}">${oRow.opt}</td>`;
     html+=`<td style="text-align:center;font-weight:bold;${rowStyle}">${oRow.max}</td></tr>`;
   });
+
   $("compareArea").innerHTML=html+"</tbody></table>";
 }
 
-/* ================= FINDER (≤10 letras) ================= */
+/* ==================================================== */
+/* ===================  FINDER  ======================= */
 function runFinder(){
   const raw=$("lettersInput").value.toUpperCase().replace(/[^A-Z]/g,"");
-  if(!raw){ alert("Enter letters"); return; }
-  const letters=[...new Set(raw.split(""))]; if(letters.length>10){
-    alert("Enter 1-10 letters"); return;
-  }
-  /* combinaciones ↓ */
+  if(!raw){alert("Enter letters");return;}
+  const letters=[...new Set(raw.split(""))]; if(letters.length>10){alert("Max 10 letters");return;}
+
+  /* combinations helper */
   const combos=(arr,k)=>{const out=[],rec=(s,a)=>{
-    if(a.length===k){ out.push(a.slice()); return; }
-    for(let i=s;i<arr.length;i++){ a.push(arr[i]); rec(i+1,a); a.pop(); }
+    if(a.length===k){out.push(a.slice());return;}
+    for(let i=s;i<arr.length;i++){a.push(arr[i]);rec(i+1,a);a.pop();}
   };rec(0,[]);return out;};
+
   let res={};
   for(let k=letters.length;k>=1;k--){
     combos(letters,k).forEach(c=>{
-      const hits=DICTIONARY.filter(w=>c.every(l=>w.includes(l)));
+      const hits=DICT_FULL.filter(w=>c.every(ch=>w.includes(ch)));
       if(hits.length) res[c.join("")]=hits;
     });
     if(Object.keys(res).length) break;
   }
-  $("finderResults").innerHTML = Object.entries(res).length
-    ? Object.entries(res).sort((a,b)=>b[0].length-a[0].length||a[0].localeCompare(b[0]))
-        .map(([c,w])=>`<h4>Using ${c} (${w.length})</h4>
-            <pre style="white-space:pre-wrap">${w.join(", ")}</pre>`).join("")
-    : "No words found";
-}
 
-/* ================= UTILS ================= */
-function containsAny(w,set){ for(const ch of set) if(w.includes(ch)) return true; return false; }
-function toggleCompareBtn(){ $("tabCompare").disabled = candidates.length===0||candidates.length>100; }
+  $("finderResults").innerHTML = Object.entries(res).length
+    ? Object.entries(res)
+        .sort((a,b)=>b[0].length-a[0].length||a[0].localeCompare(b[0]))
+        .map(([c,ws])=>`<h4>Using ${c} (${ws.length})</h4><pre>${ws.join(", ")}</pre>`)
+        .join("")
+    : "<p>No words found</p>";
+}

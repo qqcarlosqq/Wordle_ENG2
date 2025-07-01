@@ -2,41 +2,30 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Wordle Solver — English</title>
+<title>Wordle Solver — English (FULL & SHORT)</title>
+
 <link rel="stylesheet" href="style.css">
+
+<!-- DICTIONARIES -->
+<script src="dictionary_en_full.js"></script>
+<script src="dictionary_en.js"></script>
+
+<!-- Statistics helper -->
+<script src="stats_en.js"></script>
 </head>
+
 <body>
 <h1>Wordle Solver — English</h1>
 
-<style>
-/* — reglas base que ya tenías — */
-body{font-family:Arial,Helvetica,sans-serif;margin:0 12px;}
-h1{margin:10px 0;}
-table{border-collapse:collapse;font-size:12px;margin-bottom:12px;}
-th,td{padding:2px 4px;border:1px solid #e0e0e0;text-align:left;}
-th{background:#f0f0f0;white-space:nowrap;}
-td{white-space:nowrap;}
-.row{display:flex;gap:8px;flex-wrap:wrap;}
-.column{flex:1 1 140px;}
-.btnTab{margin-right:6px;margin-bottom:8px;cursor:pointer;}
-
-/* — ajustes específicos para Estadísticas — */
-#panelStats{padding-top:4px;}
-#panelStats .statsBox{display:inline-block;vertical-align:top;margin-right:18px;}
-#panelStats table{width:auto;min-width:140px;}
-#panelStats h3{margin:6px 0 2px;}
-#panelStats button{margin-bottom:6px;}
-</style>
-
+<!-- ─── Tabs ─────────────────────────────────────────── -->
 <div id="tabs">
   <button id="tabSolver"  class="active">Solve Wordle</button>
   <button id="tabFinder">Find words</button>
   <button id="tabCompare" disabled>Compare (≤100)</button>
-  <!-- NEW -->
   <button id="tabStats">Statistics</button>
 </div>
 
-<!-- ========= Solver panel ========= -->
+<!-- =========== SOLVER =========== -->
 <section id="panelSolver">
   <label>Enter a 5-letter word:
     <input id="wordInput" maxlength="5" autocomplete="off">
@@ -50,26 +39,55 @@ td{white-space:nowrap;}
 
   <pre id="history"></pre>
 
+  <!-- ─── 6 suggestion tables (single row) ─── -->
   <div class="mainTables">
+    <!-- FULL -->
     <div>
-      <h3>Candidates (<span id="candCount">0</span>)</h3>
-      <table id="tblCands"><thead><tr><th>Word</th><th>H</th></tr></thead><tbody></tbody></table>
+      <h3>Candidates FULL<br><small>(<span id="cntFull">0</span>)</small></h3>
+      <table id="tblCandFull"><thead><tr><th>Word</th><th>H</th></tr></thead><tbody></tbody></table>
     </div>
     <div>
-      <h3>Best discard</h3>
-      <table id="tblDiscard"><thead><tr><th>Word</th><th>H</th></tr></thead><tbody></tbody></table>
+      <h3>Best discard FULL</h3>
+      <table id="tblDiscFull"><thead><tr><th>Word</th><th>H</th></tr></thead><tbody></tbody></table>
     </div>
     <div>
-      <h3>Green repetition</h3>
-      <table id="tblGreen"><thead><tr><th>Word</th><th>H</th></tr></thead><tbody></tbody></table>
+      <h3>Green repetition FULL</h3>
+      <table id="tblGreenFull"><thead><tr><th>Word</th><th>H</th></tr></thead><tbody></tbody></table>
+    </div>
+
+    <!-- SHORT -->
+    <div>
+      <h3>Candidates SHORT<br><small>(<span id="cntShort">0</span>)</small></h3>
+      <table id="tblCandShort"><thead><tr><th>Word</th><th>H</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div>
+      <h3>Best discard SHORT</h3>
+      <table id="tblDiscShort"><thead><tr><th>Word</th><th>H</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div>
+      <h3>Green repetition SHORT</h3>
+      <table id="tblGreenShort"><thead><tr><th>Word</th><th>H</th></tr></thead><tbody></tbody></table>
     </div>
   </div>
 
-  <h3>Letter frequencies</h3>
-  <table id="tblFreq"><thead><tr><th>Letter</th><th># appearances</th><th># words</th><th># repeated</th></tr></thead><tbody></tbody></table>
+  <!-- ─── Letter-frequency tables ─── -->
+  <div class="freqWrap">
+    <div>
+      <h3>Letter frequencies FULL</h3>
+      <table id="tblFreqFull"><thead>
+        <tr><th>Letter</th><th># appears</th><th># words</th><th># repeated</th></tr>
+      </thead><tbody></tbody></table>
+    </div>
+    <div>
+      <h3>Letter frequencies SHORT</h3>
+      <table id="tblFreqShort"><thead>
+        <tr><th>Letter</th><th># appears</th><th># words</th><th># repeated</th></tr>
+      </thead><tbody></tbody></table>
+    </div>
+  </div>
 </section>
 
-<!-- ========= Finder panel ========= -->
+<!-- =========== FINDER =========== -->
 <section id="panelFinder" hidden>
   <label>Letters to use (1-10):
     <input id="lettersInput" maxlength="10" autocomplete="off">
@@ -78,53 +96,49 @@ td{white-space:nowrap;}
   <div id="finderResults"></div>
 </section>
 
-<!-- ========= Compare panel ========= -->
+<!-- =========== COMPARE =========== -->
 <section id="panelCompare" hidden>
-  <p>
-    Extra guesses (optional, max 2, comma-separated):<br>
-    <input id="extraInput" style="width:300px">
-    <button id="runCompare">Run comparison</button>
-  </p>
+  Candidate pool:
+  <select id="comparePool">
+    <option value="full">FULL</option>
+    <option value="short" selected>SHORT</option> <!-- ← ahora por defecto -->
+  </select><br>
+  Extra guesses (optional, max 2, comma-separated):<br>
+  <input id="extraInput" style="width:300px">
+  <button id="runCompare">Run comparison</button>
+
   <div id="compareArea" style="overflow:auto"></div>
 </section>
-
-<!-- ========= Statistics panel (NEW) ========= -->
+<!-- =========== STATISTICS =========== -->
 <section id="panelStats" hidden>
   <h2>Statistics</h2>
 
   <div class="statsBox">
     <h3>NYT</h3>
     <button id="btnResetActual">Reset / Edit</button>
-    <table>
-      <thead><tr><th>Guesses</th><th>Count</th><th>%</th></tr></thead>
-      <tbody id="statsActualBody"></tbody>
-    </table>
+    <table><thead><tr><th>Guesses</th><th>Count</th><th>%</th></tr></thead>
+           <tbody id="statsActualBody"></tbody></table>
   </div>
 
   <div class="statsBox">
-    <h3>After Initial Tool</h3>
+    <h3>After initial tool</h3>
     <button id="btnResetHist">Reset / Edit</button>
-    <table>
-      <thead><tr><th>Guesses</th><th>Count</th><th>%</th></tr></thead>
-      <tbody id="statsHistBody"></tbody>
-    </table>
+    <table><thead><tr><th>Guesses</th><th>Count</th><th>%</th></tr></thead>
+           <tbody id="statsHistBody"></tbody></table>
   </div>
 
   <div class="statsBox">
     <h3>After using this tool</h3>
     <button id="btnResetTool">Reset / Edit</button>
-    <table>
-      <thead><tr><th>Guesses</th><th>Count</th><th>%</th></tr></thead>
-      <tbody id="statsToolBody"></tbody>
-    </table>
+    <table><thead><tr><th>Guesses</th><th>Count</th><th>%</th></tr></thead>
+           <tbody id="statsToolBody"></tbody></table>
   </div>
 
-  <p style="clear:both"><button id="btnSendStats">Send by e-mail</button></p>
+  <!-- Excel / email -->
+  <p style="clear:both"><button id="btnSendStats">Send by email</button></p>
 </section>
 
-<!-- ========= Scripts (order matters!) ========= -->
-<script src="diccionario_en.js"></script>
-<script src="stats_en.js"></script>   <!-- NEW -->
+<!-- Main JS -->
 <script src="script.js"></script>
 </body>
 </html>
